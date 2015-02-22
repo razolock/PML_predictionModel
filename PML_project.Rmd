@@ -1,0 +1,108 @@
+---
+title: "Practical Machine Learning Prediction Assignment"
+author: Ruth Z
+date: "February 22, 2015"
+output: html_document
+---
+### Summary
+
+A random forest algorithm was used to create a model to predict the class of exercise performed from on-body sensor data.  The resulting model accurracy was greater than 99% and successfully calculated the 20 test cases in the prediction assignment
+
+### Background
+
+The model developed sought to predict the exercise class corresponding to one of five different manners of performance or the unilateral dumbbell biceps curl.  Class A corresponds to the specified execution of the exercise, while the other 4 classes (B - E) correspond to common mistakes.
+
+* Class A - exactly according to the specification
+* Class B - throwing the elbows to the front
+* Class C - lifting the dumbbell only halfway
+* Class D - lowering the dumbbell only halfway
+* Class E - throwing the hips to the front
+
+The training and testing data sets contain over 19,000 observations from six particpants.  Sensors were placed on the participants belt, forearm, arm, and dumbbell measuring accelerometer, gyroscope, and magnetometer data for the three Euler angles (pitch, yaw, and roll).  In total, 152 sensor data features are available.
+
+A random forest algorithm was chosen based on advice from the course discussion boards and teh approach used in the original experimentor's published results.
+
+### Data pre-processing
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(caret)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(randomForest)
+
+setwd("~/Documents/R/PML_predict")
+```
+
+Data was loaded into a `train` and `test` set.  Missing data was coded as `NA`.
+
+```{r, warning=FALSE, message=FALSE}
+train  <- read.csv("pml-training.csv", header=TRUE, na.strings = c("", " ","NA"))
+test  <- read.csv("pml-testing.csv", header=TRUE, na.strings = c("", " ","NA"))
+```
+
+The `train` data was further divided into training (60%) and testing (40%) data sets.  The 152 feature columns were coerced into class numeric and extra data columns were removed.  The resulting data set was named `training`.  
+
+```{r, warning=FALSE, message=FALSE}
+inTrain <- createDataPartition(y = train$classe, p = 0.6, list = FALSE)
+
+training <- train[inTrain, ]
+testing <- train[-inTrain, ]
+
+train2 <- apply(training[, 8:159], 2, as.numeric)
+train2 <- as.data.frame(train2)
+train3 <- cbind(training[, 1:7], training[, 160], train2)
+colnames(train3)[8] <- "classe"
+training <- train3[, 8:160]
+```
+
+A significant amount of the sensor data is missing in many columns.  Columns containing NAs were deleted leaving a data set with 52 features for prediction.
+
+```{r, warning=FALSE, message=FALSE}
+training<-training[,colSums(is.na(training)) <= 400]
+```
+
+The distributions of the remaining 52 features are plotted below.
+
+```{r, warning=FALSE, message=FALSE}
+t1 <- melt(as.data.frame(training[-1]))
+plot1 <- ggplot(data = t1, aes(x = variable, y = value)) + 
+    geom_boxplot() + 
+    scale_y_log10() +
+    scale_x_discrete(labels = NULL)
+plot1
+```
+
+A random forest model was fitted using the `randomForest` package.  Several values were tested for the number of trees.  Two hundred trees was selected as it appeared to provide sufficient accuracy.
+
+```{r, warning=FALSE, message=FALSE}
+modelFit <- randomForest(classe ~ ., data = training, ntree = 200)
+```
+
+The model was used to predict results from the `testing` data set.  The confusion matrix is printed.
+
+```{r, warning=FALSE, message=FALSE}
+pred <- predict(modelFit, testing)
+x <- confusionMatrix(pred, testing$classe)
+x
+```
+
+### Error estimates and cross validation
+
+The implementaiton of the random forest algorithm provided a very accurate model. The accuracy is reported to be:
+```{r}
+x$byClass[1]
+```
+
+Within the testing data, the number of errors was:
+```{r}
+errorSum <- sum(x$table[-c(1, 7, 13, 19, 25)])
+errorSum
+```
+
+The outside error rate was:
+```{r}
+errorSum/dim(testing)[1]
+```
+
+The use of a random forest algorithm precluded the need for further cross-validation or a separate test set to get an unbiased estimate of the test set error. It is estimated internally.  More information on this assessment is available from the University of California at Berkely found this [link.](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr)
